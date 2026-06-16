@@ -253,30 +253,41 @@ function parseImageFilename(folderType, name) {
 
 /**
  * 弹目录选择器 → 扫 body/ mask/ eye/ → 全部 PNG 导入到对应物种/面部。
- * 返回 { body, mask, eye, skipped, errors[] }
+ * 返回 { body, mask, eye, skipped, errors[], foldersFound[], pickedDirName }
  */
 export async function importImageFolder() {
   if (!isSupported()) throw new Error('当前浏览器不支持目录访问（仅 Chrome / Edge）');
   const rootHandle = await window.showDirectoryPicker({ mode: 'read' });
+  console.log('[import] 选定目录:', rootHandle.name);
 
-  const results = { body: 0, mask: 0, eye: 0, skipped: 0, errors: [] };
-  isRestoring = true; // 屏蔽 fs-sync 自动回写（避免每张图触发一次写盘）
+  const results = {
+    body: 0, mask: 0, eye: 0, skipped: 0, errors: [],
+    foldersFound: [], pickedDirName: rootHandle.name,
+  };
+  isRestoring = true; // 屏蔽 fs-sync 自动回写
   try {
     for (const folderType of ['body', 'mask', 'eye']) {
       let subDir;
       try {
         subDir = await rootHandle.getDirectoryHandle(folderType);
       } catch {
-        continue; // 子目录不存在 → 跳过
+        console.warn(`[import] 子目录 ${folderType}/ 不存在`);
+        continue;
       }
+      results.foldersFound.push(folderType);
+      let fileCount = 0;
       for await (const [name, handle] of subDir.entries()) {
+        fileCount++;
         if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.png')) {
+          console.log(`[import] 跳过非 PNG: ${folderType}/${name}`);
           results.skipped++;
           continue;
         }
         const target = parseImageFilename(folderType, name);
         if (!target) {
-          results.errors.push(`${folderType}/${name}：文件名格式不识别`);
+          const msg = `${folderType}/${name}：文件名格式不识别`;
+          console.warn('[import]', msg);
+          results.errors.push(msg);
           continue;
         }
         try {
@@ -287,23 +298,29 @@ export async function importImageFolder() {
             await set(`body:${target.speciesId}`, grid);
             await set(`body:${target.speciesId}:png`, dataUrl);
             results.body++;
+            console.log(`[import] body ${name} → ${target.speciesId}`);
           } else if (folderType === 'mask') {
             await set(`mask:${target.speciesId}`, grid);
             results.mask++;
+            console.log(`[import] mask ${name} → ${target.speciesId}`);
           } else if (folderType === 'eye') {
             await set(`face:${target.faceId}`, grid);
             await set(`face:${target.faceId}:png`, dataUrl);
             results.eye++;
+            console.log(`[import] eye ${name} → ${target.faceId}`);
           }
         } catch (e) {
-          results.errors.push(`${folderType}/${name}：${e.message || e}`);
+          const msg = `${folderType}/${name}：${e.message || e}`;
+          console.error('[import]', msg, e);
+          results.errors.push(msg);
         }
       }
+      console.log(`[import] 子目录 ${folderType}/ 处理 ${fileCount} 项`);
     }
   } finally {
     isRestoring = false;
   }
-  // 完成后触发一次写盘（如果连接了目录）
+  console.log('[import] 全部完成', results);
   if (dirHandle) scheduleWrite(0);
   return results;
 }

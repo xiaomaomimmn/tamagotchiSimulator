@@ -235,11 +235,25 @@ $fsSyncControls.addEventListener('click', async e => {
       alert(`已触发下载（含 ${n} 条数据）。把文件放到仓库的 assets/ 目录下，git commit + push 即可同步到 GitHub。`);
     } else if (btn.dataset.role === 'fs-import-folder') {
       const r = await fsSync.importImageFolder();
-      const summary = `导入完成：身体 ${r.body} / 蒙版 ${r.mask} / 面部 ${r.eye}（跳过 ${r.skipped} 个非 PNG）`;
+      // 选错文件夹（里面没有 body/mask/eye 子目录）
+      if (r.foldersFound.length === 0) {
+        alert(
+          `❌ 未在「${r.pickedDirName}」下找到 body/ mask/ eye 任一子目录。\n\n` +
+          `你应该选择 tomagotchi 这一级（含 body / mask / eye 三个子文件夹的目录），` +
+          `而不是进入到其中某个子目录后再点确定。`
+        );
+        return;
+      }
+      const summary =
+        `✓ 在「${r.pickedDirName}」找到子目录：${r.foldersFound.join(' / ')}\n\n` +
+        `导入：身体 ${r.body} / 蒙版 ${r.mask} / 面部 ${r.eye}（跳过 ${r.skipped} 个非 PNG）`;
       const errLines = r.errors.length
         ? `\n\n错误 ${r.errors.length} 条：\n${r.errors.slice(0, 10).join('\n')}${r.errors.length > 10 ? '\n…' : ''}`
         : '';
-      alert(summary + errLines);
+      const extra = (r.body + r.mask + r.eye) === 0
+        ? '\n\n⚠ 没有任何文件成功导入。检查命名是否符合 {type}_{N}_{M}.png 格式，控制台（F12）有详细日志。'
+        : '';
+      alert(summary + errLines + extra);
     }
   } catch (err) {
     // 用户在浏览器选择器里点了取消/Esc → 安静地忽略
