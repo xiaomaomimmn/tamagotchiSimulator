@@ -156,3 +156,75 @@ subscribe(k => {
   if (!dirHandle) return;
   scheduleWrite();
 });
+
+// ============================================================
+// HTTP 自动加载：浏览器开页时通过 fetch 读 assets/library.json，
+// 不需要 File System Access API、不需要任何用户授权。
+// ============================================================
+
+const LIBRARY_URL = './assets/library.json';
+
+/** 通过 HTTP 拉取 library.json。文件不存在或非法返回 null。 */
+export async function fetchLibraryJson() {
+  try {
+    const resp = await fetch(LIBRARY_URL, { cache: 'no-cache' });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 把 library.json 数据写回 IndexedDB（覆盖现有 key）。 */
+export async function applyLibraryData(data) {
+  isRestoring = true;
+  try {
+    let count = 0;
+    for (const [k, v] of Object.entries(data)) {
+      if (k.startsWith('__')) continue;
+      await set(k, v);
+      count++;
+    }
+    return count;
+  } finally {
+    isRestoring = false;
+  }
+}
+
+/** 启动时调用：本地 IDB 没有用户数据时，从 library.json 自动加载。 */
+export async function autoLoadIfEmpty() {
+  const userKeys = keys().filter(k => !k.startsWith('__'));
+  if (userKeys.length > 0) return { loaded: false, reason: 'idb-has-data', count: userKeys.length };
+  const data = await fetchLibraryJson();
+  if (!data) return { loaded: false, reason: 'no-file' };
+  const count = await applyLibraryData(data);
+  return { loaded: true, count };
+}
+
+/** 强制从 library.json 重新加载（覆盖本地）。 */
+export async function reloadFromLibraryJson() {
+  const data = await fetchLibraryJson();
+  if (!data) return { loaded: false, reason: 'no-file' };
+  const count = await applyLibraryData(data);
+  return { loaded: true, count };
+}
+
+/** 触发浏览器下载当前 IndexedDB 全集为 library.json（任何浏览器都能用）。 */
+export function downloadLibraryJson() {
+  const data = {};
+  for (const k of keys()) {
+    if (k.startsWith('__')) continue;
+    const v = get(k);
+    if (v != null) data[k] = v;
+  }
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'library.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+  return Object.keys(data).length;
+}

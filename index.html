@@ -24,10 +24,10 @@
       若双方都在 / 都不在该生态，则无明确本体，按 50/50 处理。
     </p>
 
-    <h2>资源同步（写入项目目录）</h2>
+    <h2>资源同步（GitHub 仓库 ↔ 本地）</h2>
     <p class="hint">
-      选择仓库根目录后，所有像素图 / 命名 / 收藏 / 联机 / 麻麻圈 都会自动写入 <code>assets/library.json</code>，
-      commit + push 即同步到 GitHub。<strong>仅 Chrome / Edge 支持。</strong>每次新会话需点一次「重新连接」恢复授权。
+      <strong>📥 加载</strong>：每次开页都自动从 <code>assets/library.json</code> 读（仅本地 IndexedDB 为空时；任何浏览器都行）。<br>
+      <strong>📤 保存</strong>：你画 / 改 / 收藏 → 用「下载」或「自动写入」回写到 <code>library.json</code> → <code>git commit + push</code> 即上传到 GitHub。
     </p>
     <div id="fs-sync-controls" class="fs-sync"></div>
 

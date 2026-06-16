@@ -651,6 +651,12 @@ main {
   background: var(--accent); color: white; border-color: var(--accent);
 }
 .fs-buttons button:hover { opacity: 0.9; }
+.fs-section { margin-bottom: 12px; }
+.fs-section + .fs-section { border-top: 1px dashed var(--border); padding-top: 12px; }
+.fs-section-title {
+  margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-soft);
+}
+.fs-status code { font-family: ui-monospace, monospace; font-size: 12px; }
 
 .locked-hint {
   background: #fff3cd; color: #856404;

@@ -28,9 +28,12 @@ python -m http.server 8000
 
 默认所有用户数据（像素图、自定义命名、联机记录、麻麻圈、收藏等）存浏览器的 IndexedDB。换浏览器 / 换设备 / 清缓存 = 数据丢失。
 
-**跨设备同步**：进 ⚙ 设置 → 「资源同步」→ 「选择 / 重新连接目录」选定本仓库根目录，之后所有变更会自动写入 `assets/library.json`，commit + push 即同步到 GitHub。**仅 Chrome / Edge 支持**（File System Access API）。其它浏览器只能纯本地用。
+**与 GitHub 同步**：
 
-新设备克隆仓库后，按相同步骤选定本仓库根目录，会自动从 `assets/library.json` 恢复全部数据。
+- **📥 加载**：每次开页都自动通过 `fetch('./assets/library.json')` 加载（仅本地 IndexedDB 为空时执行，任何浏览器都行）。新机器克隆仓库 → 启 HTTP 服务器 → 打开浏览器即看到所有数据。
+- **📤 保存**：两种方式：
+  - **下载按钮（通用）**：⚙ 设置 → 资源同步 → 下载 library.json → 文件移到 `assets/` → `git commit && git push`。任何浏览器。
+  - **自动写入（Chromium 限定）**：连接仓库根目录后所有改动 1.5s 防抖自动写入 `assets/library.json`，省掉手动下载步骤。每次新会话需重新授权一次（浏览器安全策略）。
 
 ## 目录结构
 

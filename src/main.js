@@ -13,6 +13,17 @@ import * as fsSync from './data/fs-sync.js';
 
 await initStorage();
 
+// 启动时若本地 IndexedDB 为空（如新设备 / 清缓存后），自动从 assets/library.json 加载
+let autoLoadResult = null;
+try {
+  autoLoadResult = await fsSync.autoLoadIfEmpty();
+  if (autoLoadResult.loaded) {
+    console.log(`[fs-sync] 自动从 library.json 加载了 ${autoLoadResult.count} 条数据`);
+  }
+} catch (e) {
+  console.warn('[fs-sync] 自动加载失败:', e);
+}
+
 // state.color 是任意 hex 字符串
 // 默认面部 = 对应物种位置的面部（fc_01 ↔ 陆地·甲01，fc_18 ↔ 天空·甲01）
 const initialA = { biome: 'land', species: 'sp_l_A1', face: 'fc_01', color: '#FFB7C5' };
@@ -139,29 +150,55 @@ renderFoodNameEditor();
 // 资源同步面板
 function renderFsSyncControls() {
   const s = fsSync.getStatus();
-  if (!s.supported) {
-    $fsSyncControls.innerHTML = `<p class="locked-hint">当前浏览器不支持目录写入。请使用 Chrome / Edge。</p>`;
-    return;
+  let autoLoadLine = '';
+  if (autoLoadResult) {
+    if (autoLoadResult.loaded)
+      autoLoadLine = `<div class="fs-status connected">✓ 启动时自动加载了 <strong>${autoLoadResult.count}</strong> 条数据（来自 <code>assets/library.json</code>）</div>`;
+    else if (autoLoadResult.reason === 'idb-has-data')
+      autoLoadLine = `<div class="fs-status">本地已有 <strong>${autoLoadResult.count}</strong> 条数据 — 跳过自动加载（如需用 GitHub 版本，点下面的「从仓库重新加载」）</div>`;
+    else if (autoLoadResult.reason === 'no-file')
+      autoLoadLine = `<div class="fs-status">未找到 <code>assets/library.json</code>（仓库里还没提交过）</div>`;
   }
-  const lastWrite = s.lastWriteTs
-    ? `最近写入：${new Date(s.lastWriteTs).toLocaleTimeString()}` : '尚未写入';
-  if (s.connected) {
-    $fsSyncControls.innerHTML = `
-      <div class="fs-status connected">✓ 已连接：<code>${s.dirName}</code>/assets/library.json · ${lastWrite}</div>
+
+  let writeSection;
+  const lastWrite = s.lastWriteTs ? `最近写入：${new Date(s.lastWriteTs).toLocaleTimeString()}` : '';
+  if (!s.supported) {
+    writeSection = `
+      <div class="fs-status">当前浏览器不支持目录自动写入（仅 Chrome / Edge）；用「下载 library.json」手动同步。</div>
+    `;
+  } else if (s.connected) {
+    writeSection = `
+      <div class="fs-status connected">✓ 自动写入已连接：<code>${s.dirName}</code>/assets/library.json · ${lastWrite}</div>
       <div class="fs-buttons">
-        <button type="button" data-role="fs-load">从磁盘加载（覆盖本地）</button>
         <button type="button" data-role="fs-save" class="primary">立即写入磁盘</button>
         <button type="button" data-role="fs-disconnect">断开</button>
       </div>
     `;
   } else {
-    $fsSyncControls.innerHTML = `
-      <div class="fs-status">未连接 — 选择仓库根目录开始自动同步</div>
+    writeSection = `
+      <div class="fs-status">自动写入未连接 — 连上仓库目录后，所有改动会 1.5s 防抖写入 <code>assets/library.json</code>（Chrome/Edge 限定）</div>
       <div class="fs-buttons">
-        <button type="button" data-role="fs-pick" class="primary">选择 / 重新连接目录</button>
+        <button type="button" data-role="fs-pick" class="primary">连接仓库目录（自动写入）</button>
       </div>
     `;
   }
+
+  $fsSyncControls.innerHTML = `
+    <div class="fs-section">
+      <h3 class="fs-section-title">📥 加载</h3>
+      ${autoLoadLine}
+      <div class="fs-buttons">
+        <button type="button" data-role="fs-reload">从仓库重新加载 library.json（覆盖本地）</button>
+      </div>
+    </div>
+    <div class="fs-section">
+      <h3 class="fs-section-title">📤 保存</h3>
+      <div class="fs-buttons">
+        <button type="button" data-role="fs-download" class="primary">下载 library.json（任意浏览器，再手动放进 assets/）</button>
+      </div>
+      ${writeSection}
+    </div>
+  `;
 }
 $fsSyncControls.addEventListener('click', async e => {
   const btn = e.target.closest('button[data-role]');
@@ -169,24 +206,28 @@ $fsSyncControls.addEventListener('click', async e => {
   try {
     if (btn.dataset.role === 'fs-pick') {
       await fsSync.pickDirectory();
-      // 首次连接后看看 library.json 在不在
       const r = await fsSync.loadFromDisk().catch(() => null);
       if (r?.found) alert(`已从磁盘加载 ${r.restored} 条数据。`);
-      else await fsSync.writeToDisk(); // 没有就立刻写一份
-    } else if (btn.dataset.role === 'fs-load') {
-      const r = await fsSync.loadFromDisk();
-      alert(r.found ? `已加载 ${r.restored} 条数据。` : 'assets/library.json 不存在。');
+      else await fsSync.writeToDisk();
     } else if (btn.dataset.role === 'fs-save') {
       await fsSync.writeToDisk();
     } else if (btn.dataset.role === 'fs-disconnect') {
       await fsSync.disconnect();
+    } else if (btn.dataset.role === 'fs-reload') {
+      const r = await fsSync.reloadFromLibraryJson();
+      alert(r.loaded ? `已重新加载 ${r.count} 条数据。` : '未找到 assets/library.json。');
+      autoLoadResult = r.loaded ? { loaded: true, count: r.count } : autoLoadResult;
+      renderFsSyncControls();
+    } else if (btn.dataset.role === 'fs-download') {
+      const n = fsSync.downloadLibraryJson();
+      alert(`已触发下载（含 ${n} 条数据）。把文件放到仓库的 assets/ 目录下，git commit + push 即可同步到 GitHub。`);
     }
   } catch (err) {
     alert(`操作失败：${err.message || err}`);
   }
 });
 fsSync.onStatusChange(renderFsSyncControls);
-fsSync.tryRestore().then(renderFsSyncControls); // 启动时静默尝试恢复
+fsSync.tryRestore().then(renderFsSyncControls);
 
 subscribe((key) => {
   // food name change → relabel the food-mode dropdown options
