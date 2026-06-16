@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>拓麻歌子 Paradise 遗传搭配模拟器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>拓麻歌子 Paradise 遗传搭配模拟器</h1>
+    <div class="header-actions">
+      <button id="favorites-toggle" type="button">⭐ 收藏</button>
+      <button id="face-library-toggle" type="button">面部库</button>
+      <button id="library-toggle" type="button">物种库</button>
+      <button id="settings-toggle" type="button">⚙ 设置</button>
+    </div>
+  </header>
+
+  <section id="settings-panel" hidden>
+    <h2>遗传偏向</h2>
+    <p class="hint">
+      本体特征 -50%，对方特征 +50%。<strong>本体 = 育成场所在生态的那一方父母</strong>，由系统自动判定。
+      若双方都在 / 都不在该生态，则无明确本体，按 50/50 处理。
+    </p>
+
+    <h2>主食名称</h2>
+    <p class="hint">每个生态 3 类食物。编辑后所有「喂食模式」下拉会同步更新。</p>
+    <div id="food-name-editor"></div>
+  </section>
+
+  <main>
+    <section class="parents">
+      <div id="parent-a" class="parent-card" data-parent="A"></div>
+      <div id="parent-b" class="parent-card" data-parent="B"></div>
+    </section>
+
+    <section class="raise-controls">
+      <label>育成场：<select id="raise-biome"></select></label>
+      <label>喂食模式：<select id="food-mode"></select></label>
+    </section>
+
+    <section id="results-panel"></section>
+
+    <section id="favorites-section" hidden>
+      <h2>收藏 · 配种方法</h2>
+      <div id="favorites-panel"></div>
+    </section>
+
+    <section id="face-library-section" hidden>
+      <h2>面部库 · 68 种可遗传面部特征 <small class="hint">（不含嘴，嘴属身体）</small></h2>
+      <div id="face-library-panel"></div>
+    </section>
+
+    <section id="library-section" hidden>
+      <h2>物种库 · 身体 / 染色蒙版 / 面部位置（共 68 物种）</h2>
+      <div id="library-panel"></div>
+    </section>
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

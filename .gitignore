@@ -1,0 +1,20 @@
+# Claude Code 本地配置 / 计划 / 记忆
+.claude/
+
+# 一次性验证脚本（仅本地用）
+verify.mjs
+
+# OS 垃圾
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*~
+
+# 日志
+*.log
