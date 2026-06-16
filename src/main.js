@@ -242,6 +242,9 @@ $fsSyncControls.addEventListener('click', async e => {
       alert(summary + errLines);
     }
   } catch (err) {
+    // 用户在浏览器选择器里点了取消/Esc → 安静地忽略
+    if (err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''))) return;
+    console.error(err);
     alert(`操作失败：${err.message || err}`);
   }
 });
