@@ -26,7 +26,11 @@ python -m http.server 8000
 
 ## 数据持久化
 
-所有用户绘制的像素图、自定义命名、联机记录、收藏等都存浏览器的 IndexedDB（`tamagotchi-art` 数据库）。换浏览器 / 换设备 / 清缓存 = 数据丢失。详见 `assets/README.md` 里的存储 schema 说明。
+默认所有用户数据（像素图、自定义命名、联机记录、麻麻圈、收藏等）存浏览器的 IndexedDB。换浏览器 / 换设备 / 清缓存 = 数据丢失。
+
+**跨设备同步**：进 ⚙ 设置 → 「资源同步」→ 「选择 / 重新连接目录」选定本仓库根目录，之后所有变更会自动写入 `assets/library.json`，commit + push 即同步到 GitHub。**仅 Chrome / Edge 支持**（File System Access API）。其它浏览器只能纯本地用。
+
+新设备克隆仓库后，按相同步骤选定本仓库根目录，会自动从 `assets/library.json` 恢复全部数据。
 
 ## 目录结构
 

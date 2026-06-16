@@ -9,6 +9,7 @@ import { renderFavoritesPanel } from './ui/favorites-panel.js';
 import { onFavoritesChange, countFavorites } from './data/favorites.js';
 import { getConnections, setConnections } from './data/connections.js';
 import { getMamaCount, setMamaCount } from './data/mamaring.js';
+import * as fsSync from './data/fs-sync.js';
 
 await initStorage();
 
@@ -34,6 +35,7 @@ const $faceLibToggle = document.getElementById('face-library-toggle');
 const $faceLibSection = document.getElementById('face-library-section');
 const $faceLibPanel = document.getElementById('face-library-panel');
 const $foodNameEditor = document.getElementById('food-name-editor');
+const $fsSyncControls = document.getElementById('fs-sync-controls');
 const $favoritesToggle = document.getElementById('favorites-toggle');
 const $favoritesSection = document.getElementById('favorites-section');
 const $favoritesPanel = document.getElementById('favorites-panel');
@@ -133,6 +135,58 @@ $foodNameEditor.addEventListener('change', async (e) => {
 });
 
 renderFoodNameEditor();
+
+// 资源同步面板
+function renderFsSyncControls() {
+  const s = fsSync.getStatus();
+  if (!s.supported) {
+    $fsSyncControls.innerHTML = `<p class="locked-hint">当前浏览器不支持目录写入。请使用 Chrome / Edge。</p>`;
+    return;
+  }
+  const lastWrite = s.lastWriteTs
+    ? `最近写入：${new Date(s.lastWriteTs).toLocaleTimeString()}` : '尚未写入';
+  if (s.connected) {
+    $fsSyncControls.innerHTML = `
+      <div class="fs-status connected">✓ 已连接：<code>${s.dirName}</code>/assets/library.json · ${lastWrite}</div>
+      <div class="fs-buttons">
+        <button type="button" data-role="fs-load">从磁盘加载（覆盖本地）</button>
+        <button type="button" data-role="fs-save" class="primary">立即写入磁盘</button>
+        <button type="button" data-role="fs-disconnect">断开</button>
+      </div>
+    `;
+  } else {
+    $fsSyncControls.innerHTML = `
+      <div class="fs-status">未连接 — 选择仓库根目录开始自动同步</div>
+      <div class="fs-buttons">
+        <button type="button" data-role="fs-pick" class="primary">选择 / 重新连接目录</button>
+      </div>
+    `;
+  }
+}
+$fsSyncControls.addEventListener('click', async e => {
+  const btn = e.target.closest('button[data-role]');
+  if (!btn) return;
+  try {
+    if (btn.dataset.role === 'fs-pick') {
+      await fsSync.pickDirectory();
+      // 首次连接后看看 library.json 在不在
+      const r = await fsSync.loadFromDisk().catch(() => null);
+      if (r?.found) alert(`已从磁盘加载 ${r.restored} 条数据。`);
+      else await fsSync.writeToDisk(); // 没有就立刻写一份
+    } else if (btn.dataset.role === 'fs-load') {
+      const r = await fsSync.loadFromDisk();
+      alert(r.found ? `已加载 ${r.restored} 条数据。` : 'assets/library.json 不存在。');
+    } else if (btn.dataset.role === 'fs-save') {
+      await fsSync.writeToDisk();
+    } else if (btn.dataset.role === 'fs-disconnect') {
+      await fsSync.disconnect();
+    }
+  } catch (err) {
+    alert(`操作失败：${err.message || err}`);
+  }
+});
+fsSync.onStatusChange(renderFsSyncControls);
+fsSync.tryRestore().then(renderFsSyncControls); // 启动时静默尝试恢复
 
 subscribe((key) => {
   // food name change → relabel the food-mode dropdown options
