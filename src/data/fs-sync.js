@@ -10,6 +10,7 @@
 //   4. 重新打开页面 → 自动验证句柄权限 → 还可用则继续自动写
 
 import { keys, get, set, has, subscribe } from '../storage.js';
+import { imageFileToGrid, gridToDataURL } from '../ui/pixel-canvas.js';
 
 const HANDLE_KEY = '__fs_dir_handle__';
 const FILENAME = 'library.json';
@@ -207,6 +208,104 @@ export async function reloadFromLibraryJson() {
   if (!data) return { loaded: false, reason: 'no-file' };
   const count = await applyLibraryData(data);
   return { loaded: true, count };
+}
+
+// ============================================================
+// 文件夹一键导入：选定一个根目录，自动扫 body/ mask/ eye/ 三个
+// 子目录里的 PNG，按文件名映射到对应的物种/面部并写入 IndexedDB。
+//
+// 命名约定：{type}_{N}_{M}.png
+//   N = 1-16：(N-1)/4 = 生态下标（0-3：陆地/天空/海洋/翠林），
+//             (N-1)%4 = 主食下标（0-3：甲/乙/丙/杂）
+//   M = 1-4：该 (生态, 主食) 槽位的物种序号
+//   M = "yin"：该生态的隐藏物种
+// 例：body_1_1 → 陆地·甲01；body_5_1 → 天空·甲01；body_1_yin → 陆地·隐藏
+// ============================================================
+
+const BIOME_PREFIXES = ['l', 's', 'w', 'f']; // 陆地/天空/海洋/翠林
+const FOOD_MODES_KEYS = ['A', 'B', 'C', 'omnivore'];
+
+function parseImageFilename(folderType, name) {
+  const m = name.match(/^(body|mask|eye)_(\d+)_(\d+|yin)\.png$/i);
+  if (!m) return null;
+  const [, type, nStr, mStr] = m;
+  if (type.toLowerCase() !== folderType) return null;
+  const N = parseInt(nStr, 10);
+  const biomeIdx = Math.floor((N - 1) / 4);
+  if (biomeIdx < 0 || biomeIdx > 3) return null;
+  const biomePrefix = BIOME_PREFIXES[biomeIdx];
+
+  let speciesId, faceIndex;
+  if (mStr.toLowerCase() === 'yin') {
+    speciesId = `sp_${biomePrefix}_hidden1`;
+    faceIndex = biomeIdx * 17 + 16; // 4×4 normal + 1 hidden = 17，hidden 在最后
+  } else {
+    const foodIdx = (N - 1) % 4;
+    const foodMode = FOOD_MODES_KEYS[foodIdx];
+    const speciesIdx = parseInt(mStr, 10) - 1;
+    if (speciesIdx < 0 || speciesIdx > 3) return null;
+    speciesId = `sp_${biomePrefix}_${foodMode}${speciesIdx + 1}`;
+    faceIndex = biomeIdx * 17 + foodIdx * 4 + speciesIdx;
+  }
+  const faceId = `fc_${String(faceIndex + 1).padStart(2, '0')}`;
+  return { speciesId, faceId };
+}
+
+/**
+ * 弹目录选择器 → 扫 body/ mask/ eye/ → 全部 PNG 导入到对应物种/面部。
+ * 返回 { body, mask, eye, skipped, errors[] }
+ */
+export async function importImageFolder() {
+  if (!isSupported()) throw new Error('当前浏览器不支持目录访问（仅 Chrome / Edge）');
+  const rootHandle = await window.showDirectoryPicker({ mode: 'read' });
+
+  const results = { body: 0, mask: 0, eye: 0, skipped: 0, errors: [] };
+  isRestoring = true; // 屏蔽 fs-sync 自动回写（避免每张图触发一次写盘）
+  try {
+    for (const folderType of ['body', 'mask', 'eye']) {
+      let subDir;
+      try {
+        subDir = await rootHandle.getDirectoryHandle(folderType);
+      } catch {
+        continue; // 子目录不存在 → 跳过
+      }
+      for await (const [name, handle] of subDir.entries()) {
+        if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.png')) {
+          results.skipped++;
+          continue;
+        }
+        const target = parseImageFilename(folderType, name);
+        if (!target) {
+          results.errors.push(`${folderType}/${name}：文件名格式不识别`);
+          continue;
+        }
+        try {
+          const file = await handle.getFile();
+          const grid = await imageFileToGrid(file);
+          const dataUrl = gridToDataURL(grid);
+          if (folderType === 'body') {
+            await set(`body:${target.speciesId}`, grid);
+            await set(`body:${target.speciesId}:png`, dataUrl);
+            results.body++;
+          } else if (folderType === 'mask') {
+            await set(`mask:${target.speciesId}`, grid);
+            results.mask++;
+          } else if (folderType === 'eye') {
+            await set(`face:${target.faceId}`, grid);
+            await set(`face:${target.faceId}:png`, dataUrl);
+            results.eye++;
+          }
+        } catch (e) {
+          results.errors.push(`${folderType}/${name}：${e.message || e}`);
+        }
+      }
+    }
+  } finally {
+    isRestoring = false;
+  }
+  // 完成后触发一次写盘（如果连接了目录）
+  if (dirHandle) scheduleWrite(0);
+  return results;
 }
 
 /** 触发浏览器下载当前 IndexedDB 全集为 library.json（任何浏览器都能用）。 */

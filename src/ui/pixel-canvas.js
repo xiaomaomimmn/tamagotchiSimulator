@@ -258,43 +258,12 @@ export function createPixelCanvas(rootEl, opts = {}) {
   }
 
   async function importImage(file) {
-    const url = URL.createObjectURL(file);
     try {
-      const img = await new Promise((res, rej) => {
-        const im = new Image();
-        im.onload = () => res(im);
-        im.onerror = rej;
-        im.src = url;
-      });
-      // contain-fit：保持宽高比，居中，多余区域透明
-      const off = document.createElement('canvas');
-      off.width = SIZE; off.height = SIZE;
-      const offCtx = off.getContext('2d', { willReadFrequently: true });
-      offCtx.imageSmoothingEnabled = true;
-      offCtx.imageSmoothingQuality = 'high';
-      const ratio = Math.min(SIZE / img.naturalWidth, SIZE / img.naturalHeight);
-      const w = img.naturalWidth * ratio;
-      const h = img.naturalHeight * ratio;
-      offCtx.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
-      const data = offCtx.getImageData(0, 0, SIZE, SIZE).data;
-      const g = makeBlank();
-      for (let y = 0; y < SIZE; y++) {
-        for (let x = 0; x < SIZE; x++) {
-          const i = (y * SIZE + x) * 4;
-          if (data[i + 3] >= 128) {
-            g[y][x] = '#' + [data[i], data[i+1], data[i+2]]
-              .map(n => n.toString(16).padStart(2, '0').toUpperCase())
-              .join('');
-          }
-        }
-      }
-      grid = g;
+      grid = await imageFileToGrid(file);
       paintGrid();
     } catch (err) {
       console.error(err);
       alert('图片加载失败');
-    } finally {
-      URL.revokeObjectURL(url);
     }
   }
 
@@ -324,6 +293,46 @@ export function createPixelCanvas(rootEl, opts = {}) {
 
 export function makeBlank() {
   return Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+}
+
+/**
+ * 把任意 File（PNG/JPG/etc）采样到 SIZE×SIZE 像素网格。
+ * contain-fit：保持宽高比、居中，多余区域透明。
+ */
+export async function imageFileToGrid(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = rej;
+      im.src = url;
+    });
+    const off = document.createElement('canvas');
+    off.width = SIZE; off.height = SIZE;
+    const offCtx = off.getContext('2d', { willReadFrequently: true });
+    offCtx.imageSmoothingEnabled = true;
+    offCtx.imageSmoothingQuality = 'high';
+    const ratio = Math.min(SIZE / img.naturalWidth, SIZE / img.naturalHeight);
+    const w = img.naturalWidth * ratio;
+    const h = img.naturalHeight * ratio;
+    offCtx.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+    const data = offCtx.getImageData(0, 0, SIZE, SIZE).data;
+    const g = makeBlank();
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const i = (y * SIZE + x) * 4;
+        if (data[i + 3] >= 128) {
+          g[y][x] = '#' + [data[i], data[i+1], data[i+2]]
+            .map(n => n.toString(16).padStart(2, '0').toUpperCase())
+            .join('');
+        }
+      }
+    }
+    return g;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 // 把任意尺寸的 grid 上采样到当前 SIZE（最近邻）；旧 32×32 数据自动迁移到 128×128。

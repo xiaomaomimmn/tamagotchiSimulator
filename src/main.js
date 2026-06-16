@@ -198,6 +198,18 @@ function renderFsSyncControls() {
       </div>
       ${writeSection}
     </div>
+    <div class="fs-section">
+      <h3 class="fs-section-title">🖼️ 批量导入像素图文件夹</h3>
+      <p class="hint">
+        选一个根目录（含 <code>body/</code> <code>mask/</code> <code>eye/</code> 子文件夹），
+        按 <code>{type}_{N}_{M}.png</code> 命名约定一键写入对应物种 / 面部。
+        <br>N=1-16 表示 (生态, 主食) 槽位：1-4 陆地 A/B/C/杂、5-8 天空、9-12 海洋、13-16 翠林；
+        M=1-4 为该槽位内 4 物种之一，<code>yin</code> 为该生态的隐藏物种。<strong>仅 Chrome / Edge 支持。</strong>
+      </p>
+      <div class="fs-buttons">
+        <button type="button" data-role="fs-import-folder" class="primary">选择文件夹并一键导入</button>
+      </div>
+    </div>
   `;
 }
 $fsSyncControls.addEventListener('click', async e => {
@@ -221,6 +233,13 @@ $fsSyncControls.addEventListener('click', async e => {
     } else if (btn.dataset.role === 'fs-download') {
       const n = fsSync.downloadLibraryJson();
       alert(`已触发下载（含 ${n} 条数据）。把文件放到仓库的 assets/ 目录下，git commit + push 即可同步到 GitHub。`);
+    } else if (btn.dataset.role === 'fs-import-folder') {
+      const r = await fsSync.importImageFolder();
+      const summary = `导入完成：身体 ${r.body} / 蒙版 ${r.mask} / 面部 ${r.eye}（跳过 ${r.skipped} 个非 PNG）`;
+      const errLines = r.errors.length
+        ? `\n\n错误 ${r.errors.length} 条：\n${r.errors.slice(0, 10).join('\n')}${r.errors.length > 10 ? '\n…' : ''}`
+        : '';
+      alert(summary + errLines);
     }
   } catch (err) {
     alert(`操作失败：${err.message || err}`);
